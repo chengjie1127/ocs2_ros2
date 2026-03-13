@@ -1,109 +1,52 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 project(ocs2_self_collision)
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-find_package(ament_cmake REQUIRED)
-find_package(ocs2_core REQUIRED)
-find_package(ocs2_robotic_tools REQUIRED)
+find_package(ament_cmake_ros REQUIRED)
+find_package(Boost REQUIRED COMPONENTS system filesystem log_setup log)
 find_package(ocs2_pinocchio_interface REQUIRED)
 find_package(pinocchio REQUIRED)
-find_package(hpp-fcl REQUIRED)
-find_package(coal QUIET)
-find_package(tinyxml2 REQUIRED)
-find_package(Eigen3 3.3 REQUIRED NO_MODULE)
-find_package(Boost REQUIRED COMPONENTS system filesystem log_setup log)
 
-set(SELF_COLLISION_FCL_LINK_TARGETS hpp-fcl::hpp-fcl)
-if(TARGET coal::coal)
-  list(APPEND SELF_COLLISION_FCL_LINK_TARGETS coal::coal)
-endif()
-list(REMOVE_DUPLICATES SELF_COLLISION_FCL_LINK_TARGETS)
+find_library(TINYXML_LIBRARY NAMES tinyxml REQUIRED)
+find_path(TINYXML_INCLUDE_DIR NAMES tinyxml.h REQUIRED)
 
-set(SELF_COLLISION_EXPORT_DEPS
-  ocs2_core
-  ocs2_robotic_tools
-  ocs2_pinocchio_interface
-  pinocchio
-  hpp-fcl
-  tinyxml2
-  Eigen3
-  Boost
-)
-if(coal_FOUND)
-  list(APPEND SELF_COLLISION_EXPORT_DEPS coal)
-endif()
-
-set(FLAGS
-  ${OCS2_CXX_FLAGS}
-  ${pinocchio_CFLAGS_OTHER}
-  -Wno-ignored-attributes
-  -DPINOCCHIO_URDFDOM_TYPEDEF_SHARED_PTR
-  -DPINOCCHIO_URDFDOM_USE_STD_SHARED_PTR
-)
-
-# ocs2 pinocchio interface library
-add_library(${PROJECT_NAME}
+add_library(${PROJECT_NAME} SHARED
   src/PinocchioGeometryInterface.cpp
-  src/SelfCollision.cpp
-  src/SelfCollisionCppAd.cpp
   src/SelfCollisionConstraint.cpp
-  src/SelfCollisionConstraintCppAd.cpp
+  src/SelfCollision.cpp
 )
-target_link_libraries(${PROJECT_NAME}
-  PUBLIC
-    pinocchio::pinocchio
-    ${SELF_COLLISION_FCL_LINK_TARGETS}
-    tinyxml2::tinyxml2
-)
-target_include_directories(${PROJECT_NAME}
-  PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-    ${EIGEN3_INCLUDE_DIRS}
-    ${pinocchio_INCLUDE_DIRS}
-    ${hpp-fcl_INCLUDE_DIRS}
-)
-ament_target_dependencies(${PROJECT_NAME}
-  PUBLIC
-    ocs2_core
-    ocs2_robotic_tools
-    ocs2_pinocchio_interface
-)
-target_compile_options(${PROJECT_NAME} PUBLIC ${FLAGS})
 
-#############
-## Install ##
-#############
+target_include_directories(${PROJECT_NAME} PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+  ${TINYXML_INCLUDE_DIR}
+)
 
+# 直接链接库路径，不再使用 tinyxml2::tinyxml2 别名
+target_link_libraries(${PROJECT_NAME} PUBLIC 
+  ocs2_pinocchio_interface::ocs2_pinocchio_interface
+  pinocchio::pinocchio
+  ${TINYXML_LIBRARY}
+  Boost::system
+  Boost::filesystem
+  Boost::log_setup
+  Boost::log
+)
+
+ament_export_include_directories(include)
+ament_export_libraries(${PROJECT_NAME})
+ament_export_dependencies(ocs2_pinocchio_interface pinocchio)
+
+# Install library
 install(TARGETS ${PROJECT_NAME}
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
-install(DIRECTORY include/${PROJECT_NAME}/
-  DESTINATION include/${PROJECT_NAME}
-)
 
-install(
-  EXPORT export_${PROJECT_NAME}
-  DESTINATION share/${PROJECT_NAME}/cmake
-)
-
-ament_export_include_directories(
-  include
-  ${pinocchio_INCLUDE_DIRS}
-  ${hpp-fcl_INCLUDE_DIRS}
-  ${EIGEN3_INCLUDE_DIRS}
-)
-ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_dependencies(
-  ${SELF_COLLISION_EXPORT_DEPS}
+# Install headers
+install(DIRECTORY include/
+  DESTINATION include
 )
 
 ament_package()
-############
-# Testing ##
-############
